@@ -1,0 +1,21 @@
+[package]
+name = "rustle"
+description = "Safe abstractions for writing OpenSSL loadable providers in Rust"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+# no_std by default; opt in to link the standard library.
+default = []
+std = []
+# Bring-up tracing via write(2) to stderr; compiles to nothing when off.
+debug = []
+# Provide the no_std #[panic_handler] (C abort()) and rust_eh_personality
+# stub. Enable from the final no_std artifact; ignored when std is on.
+abort = []
+
+[dependencies]

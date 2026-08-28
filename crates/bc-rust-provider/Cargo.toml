@@ -1,0 +1,22 @@
+[package]
+name = "bc-rust-provider"
+description = "An OpenSSL loadable provider backed by bc-rust (BouncyCastle)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+# The module loads as libbc_rust, independent of the package name.
+name = "bc_rust"
+# cdylib is the loadable provider module; lib lets unit/integration tests
+# link the crate.
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+# The safe provider-ABI layer; std because bc-rust requires std.
+rustle = { path = "../rustle" }
+# The crypto: BouncyCastle's Rust port (the bc-rust workspace).
+bouncycastle = { path = "../../../bc-rust" }

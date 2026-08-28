@@ -1,0 +1,10 @@
+[book]
+title = "rustle"
+description = "Building OpenSSL loadable providers in safe Rust"
+authors = ["Nikola Pajkovsky"]
+language = "en"
+src = "src"
+
+[output.html]
+default-theme = "rust"
+git-repository-url = "https://github.com/npajkovsky/rustle"

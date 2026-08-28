@@ -1,0 +1,74 @@
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+# Same terms as OpenSSL itself.
+license = "Apache-2.0"
+
+[workspace]
+resolver = "3"
+members = [
+    "crates/rustle",
+    "crates/bc-rust-provider",
+]
+
+[workspace.dependencies]
+
+[workspace.lints]
+rust.unstable_features = "deny"
+rust.missing_docs = "warn"
+rust.rust_2018_idioms = { level = "deny", priority = -1 }
+rust.unreachable_pub = "warn"
+rust.unused_must_use = "deny"
+rust.unsafe_op_in_unsafe_fn = "deny"
+# Calling an extern fn that could unwind back across FFI is the UB that
+# panic = "abort" exists to prevent.
+rust.ffi_unwind_calls = "warn"
+
+# Supply-chain & FFI hygiene.
+rust.non_ascii_idents = "deny"
+rust.let_underscore_drop = "warn"
+rust.trivial_casts = "warn"
+rust.trivial_numeric_casts = "warn"
+rust.unused_qualifications = "warn"
+rust.unit_bindings = "warn"
+rustdoc.all = "warn"
+
+# Enforce the no_std rule: forbid reaching for std/alloc when core suffices.
+clippy.std_instead_of_core  = "warn"
+clippy.std_instead_of_alloc = "warn"
+clippy.alloc_instead_of_core = "warn"
+
+# Every `unsafe { }` must carry a `// SAFETY:` justification, and only one
+# unsafe op per block — critical for an FFI/crypto crate.
+clippy.undocumented_unsafe_blocks   = "warn"
+clippy.multiple_unsafe_ops_per_block = "warn"
+
+# Panic-free & overflow-safe: a panic aborts the whole host process, so push
+# toward fallible handling and explicit wrapping/checked arithmetic.
+clippy.unwrap_used = "warn"
+clippy.expect_used = "warn"
+clippy.panic = "warn"
+clippy.indexing_slicing = "warn"
+clippy.arithmetic_side_effects = "warn"
+clippy.cargo = { level = "warn", priority = -1 }
+# Publish-readiness, not a hardening lint; no repository URL is set yet.
+clippy.cargo_common_metadata = "allow"
+clippy.pedantic = { level = "warn", priority = -1 }
+clippy.ptr_as_ptr = "warn"
+clippy.cast_ptr_alignment = "warn"
+clippy.as_conversions = "warn"
+clippy.mem_forget = "warn"
+clippy.dbg_macro = "warn"
+clippy.todo = "warn"
+
+# A provider is loaded into a C process; a Rust panic must never unwind across
+# the FFI boundary. Aborting also frees the no_std build from needing an
+# eh_personality lang item.
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+lto = "fat"
+strip = "debuginfo"
+codegen-units = 1
