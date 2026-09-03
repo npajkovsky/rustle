@@ -19,3 +19,9 @@ debug = []
 abort = []
 
 [dependencies]
+
+[[example]]
+name = "params_provider"
+path = "../../test/params_provider.rs"
+crate-type = ["cdylib"]
+required-features = ["std"]

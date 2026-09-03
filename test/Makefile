@@ -53,7 +53,7 @@ MODULE_DIR ?= ../target/$(PROFILE)
 # loads the module under test.
 COMMON_SRCS := testutil/driver.c testutil/provider.c
 
-TEST_SRCS := provider_test.c evp_md_test.c
+TEST_SRCS := provider_test.c evp_md_test.c params_test.c
 TESTS     := $(TEST_SRCS:%.c=%$(EXE))
 
 SRCS := $(TEST_SRCS) $(COMMON_SRCS)
@@ -66,8 +66,16 @@ COMMON_OBJS := $(COMMON_SRCS:.c=.o)
 # driver's TAP reaches the harness unaltered; dropping in a new .t is enough.
 RECIPES := $(sort $(wildcard recipes/*.t))
 
-.PHONY: all module c-test test run clean
+.PHONY: all module params-provider c-test test run clean
 all: $(TESTS)
+
+# The inline-string setter is exercised by a test-only provider, built as a
+# cdylib example of rustle. Production algorithms expose no inline strings.
+params_test.o: CFLAGS += -DPARAMS_PROVIDER_PATH=\"$(abspath $(MODULE_DIR))/examples/$(subst bc_rust,params_provider,$(MODULE))\"
+params_test$(EXE): | params-provider
+
+params-provider:
+	$(CARGO) build --manifest-path ../Cargo.toml -p rustle --example params_provider --features std $(CARGO_FLAGS)
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<
