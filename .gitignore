@@ -5,3 +5,13 @@
 /docs/book
 
 /Cargo.lock
+
+/test/*_test
+*.dSYM
+
+# C test build artifacts
+*.o
+*.d
+/test/compile_commands.json
+/test/build.log
+.dir-locals.el

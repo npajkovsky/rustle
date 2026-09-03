@@ -1,0 +1,68 @@
+---
+# Linux kernel style, with one deliberate departure: binary operators lead the
+# continuation line instead of ending the previous one. Everything else follows
+# the kernel's own .clang-format, overriding the LLVM defaults it inherits.
+BasedOnStyle: LLVM
+ColumnLimit: 80
+IndentWidth: 8
+UseTab: Always
+BreakBeforeBraces: Linux
+IndentCaseLabels: false
+AllowShortIfStatementsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: None
+# Wrapped conditions and arguments indent by a full tab, not LLVM's 4.
+ContinuationIndentWidth: 8
+# && and || lead the continuation line rather than ending the previous one.
+BreakBeforeBinaryOperators: NonAssignment
+# Align macro backslashes uniformly at ColumnLimit.
+AlignEscapedNewlines: Right
+AlignTrailingComments: false
+# One initialiser per line in the KAT tables.
+BreakAfterOpenBracketBracedList: true
+BreakBeforeCloseBracketBracedList: true
+Cpp11BracedListStyle: false
+
+# Pack as many parameters or arguments onto the same line as possible
+# int myFunction(int aaaaaaaaaaaa, int bbbbbbbb,
+#                int cccc);
+BinPackArguments: true
+BinPackParameters: true
+
+# Add no space around the bit field
+# unsigned bf:2;
+BitFieldColonSpacing: None
+
+# Don't break string literals
+BreakStringLiterals: false
+
+# Indents directives before the hash. Each level uses a single space for
+# indentation.
+# #if FOO
+# # include <foo>
+# #endif
+IndentPPDirectives: AfterHash
+PPIndentWidth: 1
+
+# Align pointer to the right
+# int *a;
+PointerAlignment: Right
+
+# No space is inserted after the logical not operator
+SpaceAfterLogicalNot: false
+
+# Insert spaces before and after assignment operators
+# int a = 5;    not    int a=5;
+# a += 42;             a+=42;
+SpaceBeforeAssignmentOperators: true
+
+# Spaces will be removed before case colon.
+# case 1: break;    not     case 1 : break;
+SpaceBeforeCaseColon: false
+
+# Prefer breaking inside a nested call's argument list over breaking right
+# after an outer call's "(", so wrapped arguments align under their own paren:
+#     if (!TEST_true(EVP_Q_digest(libctx, k->alg, PROPQ, "abc", 3, out,
+#                                 &outl)))
+# rather than dropping the whole inner call to the next line. LLVM's default
+# of 0 makes the open-paren break free; anything above ~30 flips it here.
+PenaltyBreakOpenParenthesis: 100
