@@ -20,16 +20,28 @@ provider diagnostics belong on OpenSSL's error stack via the
 
 ## The invariants
 
-`rustle` must always compile under **both** of its configurations. Checking
-all of it:
+`rustle` must always compile under **both** of its configurations. The
+`Makefile` at the workspace root drives everything a change has to pass:
 
 ```sh
-cargo build -p rustle --no-default-features --features abort  # no_std
-cargo build -p rustle --features std                          # std
-cargo build -p bc-rust-provider                               # the module
-cargo test                                                    # doctests + CLI KATs
-cargo fmt --check
+make check
 ```
+
+which is these steps, each also a target of its own:
+
+| Step | Target |
+|------|--------|
+| `cargo build -p rustle --no-default-features --features abort` (`no_std`) | `build-no-std` |
+| `cargo build -p rustle --features std` | `build-std` |
+| `cargo build -p bc-rust-provider` (the module) | `module` |
+| Build the C test programs without running them | `bulid-test` |
+| `cargo fmt --check` | `fmt-check` |
+| `cargo test` — doctests + CLI KATs | `cargo-test` |
+| `prove` over `test/recipes/` — C-side KATs | `c-test` |
+
+`make test` is the last two together. `PROFILE=release` builds and tests
+against `target/release` instead; `PROVE_FLAGS` and `PKG_CONFIG_PATH` pass
+through to where they are needed. `make help` lists the rest.
 
 The `no_std` build is the one that breaks silently: `bc-rust-provider` pulls
 in `std`, so building only the module will never tell you that `rustle`
@@ -39,11 +51,64 @@ On macOS, a `no_std` cdylib is built with `-nodefaultlibs`, so the build
 script links `libSystem` back in explicitly — the `std` build already links
 it, so that is scoped to `no_std`.
 
+## Why two test suites
+
+A provider sits between two ecosystems, so it needs a test boundary on each
+side. The Cargo suite keeps verification in the normal Rust workflow and sees
+the module as a command-line user does. The C suite is an independent native
+consumer of the provider ABI, which catches integration mistakes that a test
+running only from the Rust side could share or overlook.
+
+Neither suite substitutes for the other: together they check that the Rust
+implementation builds as a Rust component and behaves as a C component once
+loaded by OpenSSL.
+
+`test/` is laid out the way OpenSSL lays out its own: a `testutil.h` public
+header, the driver under `testutil/`, test programs named `*_test.c` beside
+them, and the `prove` recipes under `recipes/`. libcrypto is found with
+`pkg-config`; override `PKG_CONFIG_PATH` if it is not on the default search
+path.
+
+### The prove harness
+
+The driver already writes TAP, so there is nothing for a recipe to translate:
+`test/recipes/` holds one recipe per test program, and a recipe `exec`s its
+program so that the driver's output *is* the recipe's output — nothing
+re-numbers or re-indents it, and the program's exit status is the recipe's.
+What that buys over running the programs in a loop is a harness that reports
+across programs and names the cases that failed, plus the flags worth having:
+`-v` for every assertion, `-j` to run recipes in parallel.
+
+```sh
+make PROVE_FLAGS=-v c-test
+```
+
+A recipe takes the two paths it cannot work out — where the programs were
+built, and where cargo put the cdylib — from `BC_RUST_TEST_DIR` and
+`BC_RUST_MODULE`, set by `test/Makefile`, which is the only file that knows
+the platform's name for the module. `test/perl/Rustle/Test.pm` falls back to
+deriving both, so a single recipe also runs by hand:
+
+```sh
+prove -v test/recipes/02-test_evp_md.t
+```
+
+Adding a test program means adding it to `TEST_SRCS` in `test/Makefile` and
+dropping a recipe beside the others; the recipe list is a wildcard.
+
+When a failure needs picking apart, `make -C test run` runs the same programs
+without the harness in the way, and a program run directly takes `-list`,
+`-test N` and `-iter N` to narrow down to a single case.
+
 ## Layout
 
 ```text
+Makefile                   top-level entry point (`make help`)
 crates/rustle/             safe provider-ABI layer (lib; no_std by default)
 crates/bc-rust-provider/   the loadable provider module (cdylib), zero unsafe
+test/                      C tests against the module, OpenSSL's test layout
+test/recipes/              one prove recipe per test program
+test/perl/                 what the recipes share
 docs/                      this book
 ```
 

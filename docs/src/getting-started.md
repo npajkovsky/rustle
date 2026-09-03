@@ -59,6 +59,17 @@ The end-to-end known-answer tests drive the built module through the
 found; set `OPENSSL=/path/to/openssl` to point at one that is not first on
 `PATH`.
 
+There is a second suite that drives the module through libcrypto's EVP API
+instead, written in C and run under `prove`. `make test` at the workspace
+root runs both:
+
+```sh
+make test
+```
+
+See [Building and Verifying](./building.md) for what each suite covers and
+how to run one of them alone.
+
 ## Writing your own provider
 
 Implement [`rustle::digest::Digest`](./design-split.md) for a hash type,

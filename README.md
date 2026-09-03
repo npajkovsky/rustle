@@ -28,7 +28,7 @@ printf abc | openssl dgst -sha256 -provider-path target/debug -provider libbc_ru
 ```
 
 ```sh
-cargo test
+make test
 ```
 
 ## Documentation

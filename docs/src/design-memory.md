@@ -17,38 +17,18 @@ straight through.
 The C heap also keeps the `no_std` build free of `#[global_allocator]`
 machinery — the crate needs no `alloc` at all.
 
-## What `malloc` cannot serve
+## Context constraints
 
-Two kinds of `T` are rejected at compile time, since neither could be
-reported through the null return — that return means recoverable OOM:
+The heap wrapper accepts only non-empty types with alignment up to 8:
 
 ```rust,ignore
 const { assert!(size_of::<T>() > 0 && align_of::<T>() <= 8) }
 ```
 
-**Zero-sized types.** C17 §7.22.3 leaves `malloc(0)` implementation-defined:
-either null is returned, *or* the result is a pointer that "shall not be used
-to access an object". Neither is a usable context. (glibc and Darwin both
-take the second branch, so this is a portability guard rather than a null
-return seen in practice.) A zero-sized context is a design error anyway — a
-digest with no state cannot accumulate across `update` calls.
-
-**Over-aligned types.** `malloc` guarantees alignment only up to
-`_Alignof(max_align_t)`: 8 on aarch64-darwin, 16 on x86-64. Measured there,
-every allocation comes back 16-aligned and none 32-aligned:
-
-```text
-size  ptr                 %8  %16 %32
-    8 0x101569eb0   0    0  16   <-- NOT 32-aligned
-   64 0x101569eb0   0    0  16   <-- NOT 32-aligned
- 2048 0x10156b370   0    0  16   <-- NOT 32-aligned
-```
-
-So a `#[repr(align(32))]` context — the natural shape for an AVX2-backed hash
-state — would have `ptr.write(value)` store through an under-aligned pointer.
-That is UB, and silent. The assert takes the conservative floor of 8 rather
-than the local `max_align_t`, so the same code rejects the same types on
-every target.
+Zero-sized allocations do not have portable `malloc` semantics and are not
+useful operation contexts. Alignment guarantees vary by target, so the
+conservative limit keeps every write valid on the supported platforms. A
+context needing stronger alignment requires a different allocation path.
 
 ## Scrubbing sensitive state: best-effort
 
