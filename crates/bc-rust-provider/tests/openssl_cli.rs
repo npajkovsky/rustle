@@ -1,3 +1,6 @@
+// Copyright The OpenSSL Project Authors. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
+
 //! End-to-end test driving the built provider module through the `openssl`
 //! CLI: a digest known-answer check via `openssl dgst`.
 //!

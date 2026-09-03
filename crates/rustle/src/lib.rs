@@ -1,3 +1,6 @@
+// Copyright The OpenSSL Project Authors. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
+
 //! `rustle` — safe abstractions for writing OpenSSL loadable providers in
 //! Rust.
 //!

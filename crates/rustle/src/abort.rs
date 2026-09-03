@@ -1,3 +1,6 @@
+// Copyright The OpenSSL Project Authors. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
+
 unsafe extern "C" {
     fn abort() -> !;
 }

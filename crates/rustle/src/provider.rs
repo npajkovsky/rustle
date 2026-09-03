@@ -1,3 +1,6 @@
+// Copyright The OpenSSL Project Authors. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
+
 //! Provider scaffolding: the [`Provider`] descriptor plus the base dispatch
 //! table OpenSSL calls (`OSSL_FUNC_PROVIDER_*`).
 //!

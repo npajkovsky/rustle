@@ -1,3 +1,6 @@
+// Copyright The OpenSSL Project Authors. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
+
 //! Bring-up tracing via `write(2)`, for use while wiring the provider up.
 //!
 //! [`trace!`](crate::trace) formats a line straight to the loading process's

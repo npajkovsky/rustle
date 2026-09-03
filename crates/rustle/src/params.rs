@@ -1,3 +1,6 @@
+// Copyright The OpenSSL Project Authors. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
+
 //! OpenSSL parameter descriptors and borrowed input/output views.
 //!
 //! [`ParamTable`] validates static descriptors. FFI callbacks construct

@@ -1,3 +1,6 @@
+// Copyright The OpenSSL Project Authors. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
+
 //! Operation contexts on the host process's C heap.
 //!
 //! A provider lives inside a C program, so contexts cross the FFI boundary

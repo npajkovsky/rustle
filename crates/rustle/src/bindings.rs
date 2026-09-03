@@ -1,3 +1,6 @@
+// Copyright The OpenSSL Project Authors. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
+
 //! Raw FFI bindings to OpenSSL's provider core types.
 //!
 //! These mirror the C declarations from `<openssl/core.h>`, so the type names

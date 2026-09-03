@@ -1,3 +1,6 @@
+// Copyright The OpenSSL Project Authors. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
+
 //! Digest operation (`OSSL_OP_DIGEST`): a safe [`Digest`] trait plus the
 //! generic FFI glue that adapts any implementation of it to the
 //! `OSSL_FUNC_digest_*` dispatch contract.

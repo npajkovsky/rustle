@@ -1,3 +1,6 @@
+// Copyright The OpenSSL Project Authors. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
+
 #![allow(missing_docs)]
 
 // On macOS every dylib must link libSystem. A no_std cdylib is built with

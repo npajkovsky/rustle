@@ -1,3 +1,6 @@
+// Copyright The OpenSSL Project Authors. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
+
 //! `bc-rust-provider` — a safe OpenSSL loadable provider backed by bc-rust
 //! (BouncyCastle's Rust port).
 //!

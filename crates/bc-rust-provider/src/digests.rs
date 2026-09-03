@@ -1,3 +1,6 @@
+// Copyright The OpenSSL Project Authors. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
+
 //! Adapter slotting bc-rust hashes into `rustle`'s safe [`Digest`] trait.
 //!
 //! bc-rust's [`Hash`] finalizers consume the hash value, while the provider
