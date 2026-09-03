@@ -53,7 +53,7 @@ MODULE_DIR ?= ../target/$(PROFILE)
 # loads the module under test.
 COMMON_SRCS := testutil/driver.c testutil/provider.c
 
-TEST_SRCS := provider_test.c
+TEST_SRCS := provider_test.c evp_md_test.c
 TESTS     := $(TEST_SRCS:%.c=%$(EXE))
 
 SRCS := $(TEST_SRCS) $(COMMON_SRCS)
