@@ -40,8 +40,20 @@ which is these steps, each also a target of its own:
 | `prove` over `test/recipes/` — C-side KATs | `c-test` |
 
 `make test` is the last two together. `PROFILE=release` builds and tests
-against `target/release` instead; `PROVE_FLAGS` and `PKG_CONFIG_PATH` pass
-through to where they are needed. `make help` lists the rest.
+against `target/release` instead; `PROVE_FLAGS` passes through to the TAP
+harness. `make help` lists the rest.
+
+To build and test against a configured OpenSSL build tree instead of the
+system OpenSSL, pass its root once:
+
+```sh
+make OPENSSL_ROOT_DIR=/path/to/openssl check
+```
+
+This selects `apps/openssl` for the CLI tests and the build tree's
+`libcrypto.pc` for the C tests. `OPENSSL_ROOT_DIR` is the public interface;
+the environment passed to `pkg-config` is managed internally by the
+Makefile.
 
 The `no_std` build is the one that breaks silently: `bc-rust-provider` pulls
 in `std`, so building only the module will never tell you that `rustle`
@@ -66,8 +78,13 @@ loaded by OpenSSL.
 `test/` is laid out the way OpenSSL lays out its own: a `testutil.h` public
 header, the driver under `testutil/`, test programs named `*_test.c` beside
 them, and the `prove` recipes under `recipes/`. libcrypto is found with
-`pkg-config`; override `PKG_CONFIG_PATH` if it is not on the default search
-path.
+`pkg-config`; the top-level Makefile configures its search from
+`OPENSSL_ROOT_DIR`.
+
+Each test binary records libcrypto's directory as an rpath. On macOS, the
+link step also rewrites an absolute libcrypto install name to its
+`@rpath`-relative form; otherwise dyld would bypass that rpath when a custom
+build still advertises its configured installation prefix.
 
 ### The prove harness
 

@@ -4,9 +4,9 @@
 //! End-to-end test driving the built provider module through the `openssl`
 //! CLI: a digest known-answer check via `openssl dgst`.
 //!
-//! The tests need an OpenSSL 3.x CLI; set `OPENSSL=/path/to/openssl` to pick
-//! one that isn't first on `PATH`. If none is available the tests skip
-//! (pass vacuously) rather than fail.
+//! The tests need an OpenSSL 3.x CLI. Run the top-level Makefile with
+//! `OPENSSL_ROOT_DIR=/path/to/openssl` to select a custom build tree. If none
+//! is available the tests skip (pass vacuously) rather than fail.
 
 use std::io::Write;
 use std::path::PathBuf;
@@ -48,7 +48,10 @@ fn openssl_available() -> bool {
             }
         }
         _ => {
-            eprintln!("skipping: `{}` not runnable; set OPENSSL=", openssl_bin());
+            eprintln!(
+                "skipping: `{}` not runnable; use OPENSSL_ROOT_DIR= with make",
+                openssl_bin()
+            );
             false
         }
     }

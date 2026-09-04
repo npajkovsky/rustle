@@ -9,13 +9,23 @@
 #   make check      everything a change has to pass before it is done
 #   make help       list the targets
 #
-#   make PKG_CONFIG_PATH=/path/to/openssl/lib/pkgconfig test
+#   make OPENSSL_ROOT_DIR=/path/to/openssl test
 #   make PROFILE=release c-test
 #   make PROVE_FLAGS=-v c-test
-#   make OPENSSL=/path/to/openssl cargo-test
 
 CARGO  ?= cargo
 MDBOOK ?= mdbook
+
+# Normalize the public OpenSSL build-tree selector once. pkg-config's search
+# path and the OPENSSL variable consumed by the Rust tests remain internal
+# implementation details.
+ifneq ($(strip $(OPENSSL_ROOT_DIR)),)
+  OPENSSL_ROOT := $(abspath $(patsubst ~/%,$(HOME)/%,$(OPENSSL_ROOT_DIR)))
+  OPENSSL_BIN := $(OPENSSL_ROOT)/apps/openssl
+  OPENSSL_PKG_CONFIG_ENV := PKG_CONFIG_PATH='$(OPENSSL_ROOT)'
+else
+  OPENSSL_BIN := openssl
+endif
 
 # The cargo profile to build and test against. test/Makefile looks for the
 # module under target/$(PROFILE), so the flag is derived from PROFILE rather
@@ -29,11 +39,12 @@ endif
 
 # Everything test/Makefile needs from up here. PROVE_FLAGS is passed through
 # unset as well, so `make PROVE_FLAGS=-v c-test` reaches the harness.
-SUBMAKE = $(MAKE) -C test PROFILE=$(PROFILE) CARGO='$(CARGO)' \
+SUBMAKE = $(OPENSSL_PKG_CONFIG_ENV) $(MAKE) -C test \
+	PROFILE=$(PROFILE) CARGO='$(CARGO)' \
 	CARGO_FLAGS='$(CARGO_FLAGS)' PROVE_FLAGS='$(PROVE_FLAGS)'
 
 .PHONY: all build build-no-std build-std module bulid-test \
-	test c-test cargo-test check fmt fmt-check clippy docs clean help
+	test c-test cargo-test check fmt fmt-check clippy docs clean help FORCE
 
 all: build
 
@@ -44,7 +55,7 @@ all: build
 # rustle has to compile in both of its configurations, and the no_std one is
 # the half that breaks silently: bc-rust-provider pulls in std, so building
 # only the module never reports that rustle stopped being no_std-clean.
-build: build-no-std build-std module
+build: build-no-std build-std module bulid-test
 
 build-no-std:
 	$(CARGO) build -p rustle --no-default-features --features abort $(CARGO_FLAGS)
@@ -57,6 +68,10 @@ module:
 
 bulid-test:
 	$(SUBMAKE) all
+
+# Build one test program by path, e.g. `make test/evp_md_test`.
+test/%: FORCE
+	$(SUBMAKE) $*
 
 # ------------------------------------------------------------------ #
 # Testing                                                            #
@@ -71,9 +86,9 @@ c-test:
 	$(SUBMAKE) c-test
 
 # Note that the CLI known-answer tests skip -- passing vacuously -- when no
-# OpenSSL 3.x binary is found; OPENSSL=/path/to/openssl points at one.
+# OpenSSL 3.x binary is found; OPENSSL_ROOT_DIR selects a custom build tree.
 cargo-test:
-	$(CARGO) test $(CARGO_FLAGS)
+	OPENSSL='$(OPENSSL_BIN)' $(CARGO) test $(CARGO_FLAGS)
 
 # The full gate: both configurations build, formatting is clean, both suites
 # pass.
@@ -108,6 +123,7 @@ help:
 	'  build-std      rustle with std' \
 	'  module         the loadable provider cdylib' \
 	'  bulid-test     build the C test programs without running them' \
+	'  test/<name>    build one test program by name, e.g. test/evp_md_test' \
 	'' \
 	'  test           cargo-test and c-test' \
 	'  c-test         the C suite under the TAP harness' \
@@ -121,4 +137,6 @@ help:
 	'  clean          cargo clean and drop the C build artifacts' \
 	'' \
 	'Variables: PROFILE (debug|release), PROVE_FLAGS, CARGO, MDBOOK,' \
-	'PKG_CONFIG_PATH, OPENSSL'
+	'OPENSSL_ROOT_DIR'
+
+FORCE:

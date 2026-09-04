@@ -3,9 +3,8 @@
 
 # Build and run the C-side tests against the built provider module.
 #
-# libcrypto is found with pkg-config. Override if it is not on the default
-# search path, e.g.:
-#   make PKG_CONFIG_PATH=/path/to/openssl/lib/pkgconfig
+# libcrypto is found with pkg-config. The top-level Makefile supplies the
+# search path when OPENSSL_ROOT_DIR selects a custom OpenSSL build tree.
 #
 # Each .c is compiled to its own .o, so a compilation-database generator
 # (compiledb, bear) records one entry per translation unit -- linking several
@@ -25,6 +24,7 @@ PROVE_FLAGS ?=
 
 OSSL_CFLAGS := $(shell $(PKGCONF) --cflags libcrypto)
 OSSL_LIBS   := $(shell $(PKGCONF) --libs libcrypto)
+OSSL_LIBDIR := $(shell $(PKGCONF) --variable=libdir libcrypto)
 
 CFLAGS ?= -O2 -g
 CFLAGS += -DDEFAULT_MODULE_DIR=\"$(MODULE_DIR)\"
@@ -43,6 +43,14 @@ else ifneq (,$(filter MINGW% MSYS% CYGWIN%,$(UNAME)))
 else
   # Linux, the BSDs, and anything else ELF.
   MODULE := libbc_rust.so
+endif
+
+# Bake the libcrypto location into each test binary at link time, so it
+# needs no DYLD_LIBRARY_PATH/LD_LIBRARY_PATH to find it at runtime.
+ifneq (,$(filter MINGW% MSYS% CYGWIN%,$(UNAME)))
+  RPATH_LDFLAGS :=
+else
+  RPATH_LDFLAGS := -Wl,-rpath,$(OSSL_LIBDIR)
 endif
 
 # Where cargo puts the cdylib.
@@ -83,7 +91,15 @@ params-provider:
 # Static pattern rule: the stem drops $(EXE), so each test links against its
 # own object plus the common ones. Adding a test means adding it to TEST_SRCS.
 $(TESTS): %$(EXE): %.o $(COMMON_OBJS)
-	$(CC) $(CFLAGS) -o $@ $^ $(OSSL_LIBS)
+	$(CC) $(CFLAGS) -o $@ $^ $(OSSL_LIBS) $(RPATH_LDFLAGS)
+ifeq ($(UNAME),Darwin)
+	@crypto_install_name=$$(otool -L '$@' \
+		| awk '/libcrypto.*[.]dylib/ { print $$1; exit }'); \
+	case "$$crypto_install_name" in \
+	/*) install_name_tool -change "$$crypto_install_name" \
+		"@rpath/$$(basename "$$crypto_install_name")" '$@' ;; \
+	esac
+endif
 
 # The module under test. Its profile has to be the one MODULE_DIR names.
 module:
@@ -93,7 +109,8 @@ module:
 # and what `make test` at the workspace root ends up calling. The recipes
 # take both paths from the environment so that they hold no build knowledge
 # of their own -- the fallbacks in perl/Rustle/Test.pm only cover running a
-# recipe by hand.
+# recipe by hand. Note libcrypto itself is *not* among those paths: each test
+# binary already knows where to find it via the rpath baked in above.
 c-test: $(TESTS) module
 	BC_RUST_TEST_DIR='$(abspath .)' \
 	BC_RUST_MODULE='$(abspath $(MODULE_DIR)/$(MODULE))' \
