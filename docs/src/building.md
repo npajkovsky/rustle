@@ -54,10 +54,12 @@ system OpenSSL, pass its root once:
 make OPENSSL_ROOT_DIR=/path/to/openssl check
 ```
 
-This selects `apps/openssl` for the CLI tests and the build tree's
-`libcrypto.pc` for the C tests. `OPENSSL_ROOT_DIR` is the public interface;
-the environment passed to `pkg-config` is managed internally by the
-Makefile.
+This selects the build tree's `libcrypto.pc` for the C tests.
+`OPENSSL_ROOT_DIR` is the public interface; the environment passed to
+`pkg-config` is managed internally by the Makefile. Changing the selected
+OpenSSL configuration, compiler flags, or module directory rebuilds the C
+objects and relinks the test programs. An unchanged configuration preserves
+incremental builds; switching roots does not require `make clean`.
 
 The `no_std` build is the one that breaks silently: `bc-rust-provider` pulls
 in `std`, so building only the module will never tell you that `rustle`

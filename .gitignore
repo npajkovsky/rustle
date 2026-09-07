@@ -14,4 +14,6 @@
 *.d
 /test/compile_commands.json
 /test/build.log
+/test/.build-config
+/test/.build-config.tmp
 .dir-locals.el

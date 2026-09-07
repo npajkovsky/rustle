@@ -25,6 +25,7 @@ PROVE_FLAGS ?=
 OSSL_CFLAGS := $(shell $(PKGCONF) --cflags libcrypto)
 OSSL_LIBS   := $(shell $(PKGCONF) --libs libcrypto)
 OSSL_LIBDIR := $(shell $(PKGCONF) --variable=libdir libcrypto)
+OSSL_PCFILE := $(shell $(PKGCONF) --variable=pcfiledir libcrypto)/libcrypto.pc
 
 CFLAGS ?= -O2 -g
 CFLAGS += -DDEFAULT_MODULE_DIR=\"$(MODULE_DIR)\"
@@ -74,8 +75,20 @@ COMMON_OBJS := $(COMMON_SRCS:.c=.o)
 # driver's TAP reaches the harness unaltered; dropping in a new .t is enough.
 RECIPES := $(sort $(wildcard recipes/*.t))
 
-.PHONY: all module params-provider c-test test run clean
+.PHONY: all module params-provider c-test test run clean FORCE
 all: $(TESTS)
+
+# Snapshot global flags before target-specific additions can be inherited.
+# Compare contents on every invocation, but change the timestamp only when
+# configuration changes. All objects then rebuild and every binary relinks.
+BUILD_CONFIG := CC=$(CC) CFLAGS=$(CFLAGS) PKGCONF=$(PKGCONF) OSSL_PCFILE=$(OSSL_PCFILE) OSSL_LIBS=$(OSSL_LIBS) RPATH_LDFLAGS=$(RPATH_LDFLAGS) MODULE_DIR=$(MODULE_DIR)
+shell_quote = '$(subst ','"'"',$(1))'
+
+.build-config: FORCE
+	@printf '%s\n' $(call shell_quote,$(BUILD_CONFIG)) > $@.tmp
+	@if cmp -s $@.tmp $@; then rm -f $@.tmp; else mv -f $@.tmp $@; fi
+
+$(OBJS): .build-config
 
 # The inline-string setter is exercised by a test-only provider, built as a
 # cdylib example of rustle. Production algorithms expose no inline strings.
@@ -126,6 +139,9 @@ run: $(TESTS) module
 
 clean:
 	rm -f $(TESTS) $(OBJS) $(DEPS)
+	rm -f .build-config .build-config.tmp
 	rm -rf $(TESTS:%=%.dSYM)
+
+FORCE:
 
 -include $(DEPS)
