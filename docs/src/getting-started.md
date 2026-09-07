@@ -20,7 +20,8 @@ name to pass on the command line is `libbc_rust`.
 ## List what it registers
 
 ```sh
-openssl list -provider-path target/debug -provider libbc_rust -digest-algorithms -propquery "?provider=bc_rust"
+openssl list -provider-path target/debug -provider libbc_rust -digest-algorithms \
+    -propquery "?provider=bc_rust"
 ```
 
 ```text

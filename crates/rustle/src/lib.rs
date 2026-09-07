@@ -32,3 +32,5 @@ pub mod digest;
 mod heap;
 pub mod params;
 pub mod provider;
+
+pub use rustle_macros::vtable;

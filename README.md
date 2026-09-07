@@ -11,6 +11,7 @@ and *implementing cryptography* never live in the same crate:
 | Crate | Role |
 |-------|------|
 | [`crates/rustle`](crates/rustle) | Safe abstraction over the provider FFI — contains every `unsafe` block in the workspace, behind safe APIs |
+| [`crates/rustle-macros`](crates/rustle-macros) | Host-side method-presence macro for optional provider callbacks |
 | [`crates/bc-rust-provider`](crates/bc-rust-provider) | The loadable provider module (`cdylib`) — `#![forbid(unsafe_code)]`, crypto from bc-rust |
 
 

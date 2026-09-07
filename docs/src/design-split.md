@@ -8,26 +8,42 @@ and still exports a working `OSSL_provider_init`.
 
 ## What a provider author writes
 
-Implement `rustle::digest::Digest` for a hash type — a plain trait over
-`update`/`finalize`, with `Default` supplying fresh state and `Clone`
-powering `dupctx`:
+Implement `rustle::digest::Digest` for a hash type. Construction, reset,
+streaming, and finalization are explicit. Mark the implementation with
+`#[rustle::vtable]` so the generated table registers only the optional
+methods it supplies:
 
 ```rust,ignore
-impl<H: Hash + HashAlgParams + Clone> Digest for BcDigest<H> {
-    const DIGEST_LEN: usize = H::OUTPUT_LEN;
-    const BLOCK_LEN: usize = H::BLOCK_LEN;
+#[rustle::vtable]
+impl<H: Hash + HashAlgParams + Clone + 'static> Digest for BcDigest<H> {
+    fn newctx() -> Result<Self> {
+        Ok(Self(H::default()))
+    }
+
+    fn init(&mut self, _params: Option<Params<'_>>) -> Result {
+        self.0 = H::default();
+        Ok(())
+    }
 
     rustle::gettable_params! {
-        c"blocksize": UNSIGNED_INTEGER => |p| p.set_size_t(Self::BLOCK_LEN),
-        c"size":      UNSIGNED_INTEGER => |p| p.set_size_t(Self::DIGEST_LEN),
+        c"blocksize": UNSIGNED_INTEGER => |p| p.set_size_t(H::BLOCK_LEN),
+        c"size":      UNSIGNED_INTEGER => |p| p.set_size_t(H::OUTPUT_LEN),
     }
 
-    fn update(&mut self, data: &[u8]) {
+    fn update(&mut self, data: &[u8]) -> Result {
         self.0.do_update(data);
+        Ok(())
     }
 
-    fn finalize(&mut self, out: &mut [u8]) {
-        core::mem::take(&mut self.0).do_final_out(out);
+    fn finalize(&mut self, out: &mut Output<'_>) -> Result {
+        out.write_with(H::OUTPUT_LEN, |bytes| {
+            core::mem::take(&mut self.0).do_final_out(bytes);
+            Ok(())
+        })
+    }
+
+    fn dupctx(&self) -> Result<Self> {
+        Ok(Self(self.0.clone()))
     }
 }
 ```
@@ -47,8 +63,9 @@ rustle::provider_init!(PROVIDER);
 ```
 
 `DigestAlgorithm<D>` is never instantiated. It exists so each hash type gets
-its own monomorphized `OSSL_FUNC_digest_*` dispatch table, `END`-terminated,
-generated from the trait impl.
+its own monomorphized, `END`-terminated `OSSL_FUNC_digest_*` dispatch
+table. Required callbacks are always present. Optional callbacks are packed
+into the table according to the methods recorded by `#[rustle::vtable]`.
 
 `OSSL_DISPATCH` keeps its identifier and erased function pointer private.
 Its typed callback constructors are crate-private, and the erasure helper
@@ -76,8 +93,9 @@ declarations keep their existing syntax.
 
 Everything that has to cross the FFI boundary:
 
-- **Context lifetime.** `newctx`/`dupctx`/`freectx` allocate, clone, and drop
-  the `D` behind a `*mut c_void`. See [Context Memory](./design-memory.md).
+- **Context lifetime.** `newctx` and optional `dupctx` return owned `D`
+  values; the adapters allocate them behind `*mut c_void`, and `freectx`
+  drops them. See [Context Memory](./design-memory.md).
 - **Raw pointer discipline.** Null checks, `from_raw_parts` over the core's
   `(ptr, len)` pairs, out-pointer writes. Every block carries a `SAFETY:`
   justification, enforced by `clippy::undocumented_unsafe_blocks`.
@@ -116,6 +134,14 @@ to use the read-only view and its data getters. Descriptor tables retain
 the raw ABI representation behind `ParamTable`, separate from borrowed
 writable cells.
 
+The integer output helpers support only their native widths: `set_int`
+requires an `INTEGER` buffer of `sizeof(int)`, and `set_size_t` an
+`UNSIGNED_INTEGER` buffer of `sizeof(size_t)`. Other buffer sizes fail
+without writing; unlike OpenSSL's general setters, these helpers do not
+convert integer widths. Null data remains a size query regardless of
+`data_size`. For a matching type, `return_size` reports the native width
+on both queries and size failures; a type mismatch resets it to zero.
+
 ## Const validation
 
 Table termination is checked at `const`-evaluation time. A `ProviderDesc`
@@ -152,8 +178,17 @@ Termination alone does not make descriptor names valid. `OSSL_PARAM::defn`
 requires a `&'static CStr`, matching the C-string literals used by the macros.
 The descriptor can then store the key pointer without losing its lifetime.
 
+## Method-driven dispatch
+
+`#[rustle::vtable]` records which optional digest methods an implementation
+supplies. This avoids capability-trait combinations while keeping one
+strongly typed context and one audited set of FFI adapters. See
+[Digest Vtables](./design-vtable.md) for the interface and its current scope.
+
 ## Minimal dependencies
 
-`rustle` has no dependencies and must stay that way. `bc-rust-provider`
-depends only on `rustle` and bc-rust. A provider is loaded into processes
-that did not choose your dependency tree.
+`rustle` has no target runtime dependencies. Its `rustle-macros` dependency
+uses `syn`, `quote`, and `proc-macro2` on the build host to generate safe
+method-presence metadata. That tooling is not linked into the provider.
+`bc-rust-provider` depends only on `rustle` and bc-rust. Keeping host macro
+tooling separate preserves the runtime's `no_std` support.

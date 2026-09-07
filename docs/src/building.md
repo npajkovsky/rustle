@@ -2,6 +2,10 @@
 
 ## Crate features (`rustle`)
 
+The `rustle-macros` proc-macro crate and its parser dependencies compile for
+the build host. They require the host Rust standard library even when the
+target build uses `no_std`; they are not linked into the provider module.
+
 | Feature | Effect |
 |---------|--------|
 | *(default)* | `no_std`: only `core`, contexts on the C heap |
@@ -122,6 +126,7 @@ without the harness in the way, and a program run directly takes `-list`,
 ```text
 Makefile                   top-level entry point (`make help`)
 crates/rustle/             safe provider-ABI layer (lib; no_std by default)
+crates/rustle-macros/      host-side method-presence attribute (proc-macro)
 crates/bc-rust-provider/   the loadable provider module (cdylib), zero unsafe
 test/                      C tests against the module, OpenSSL's test layout
 test/recipes/              one prove recipe per test program

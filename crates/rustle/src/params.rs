@@ -271,7 +271,8 @@ impl ParamMut<'_> {
 
     /// Writes a C `int` to an `INTEGER` cell and reports its byte size.
     ///
-    /// Null data is a size query; a type mismatch returns `false`.
+    /// Null data is a size query. Non-null data must have exactly the native
+    /// width; a type or size mismatch returns `false` without writing.
     pub fn set_int(&mut self, val: ffi::c_int) -> bool {
         self.raw.return_size = 0;
 
@@ -283,6 +284,9 @@ impl ParamMut<'_> {
         if self.raw.data.is_null() {
             return true;
         }
+        if self.raw.data_size != size_of::<ffi::c_int>() {
+            return false;
+        }
         // SAFETY: type, non-null, and exact size checked above; `data` is a
         // valid writable `c_int` per the `ParamsMut` contract.
         unsafe { *(self.raw.data as *mut ffi::c_int) = val };
@@ -291,7 +295,8 @@ impl ParamMut<'_> {
 
     /// Writes a `size_t` to an `UNSIGNED_INTEGER` cell and reports its byte size.
     ///
-    /// Null data is a size query; a type mismatch returns `false`.
+    /// Null data is a size query. Non-null data must have exactly the native
+    /// width; a type or size mismatch returns `false` without writing.
     pub fn set_size_t(&mut self, val: usize) -> bool {
         self.raw.return_size = 0;
 
@@ -302,6 +307,9 @@ impl ParamMut<'_> {
         self.raw.return_size = size_of::<usize>();
         if self.raw.data.is_null() {
             return true;
+        }
+        if self.raw.data_size != size_of::<usize>() {
+            return false;
         }
 
         // SAFETY: type, non-null, and exact size checked above; `data` is a
@@ -546,26 +554,35 @@ macro_rules! param_table {
 /// available in the expression. Unlisted names return `false`.
 ///
 /// ```
-/// use rustle::digest::Digest;
+/// use rustle::digest::{Digest, Output, Result};
+/// use rustle::params::Params;
 ///
-/// #[derive(Clone, Default)]
 /// struct MyHash([u8; 32]);
 ///
+/// #[rustle::vtable]
 /// impl Digest for MyHash {
-///     const DIGEST_LEN: usize = 32;
-///     const BLOCK_LEN: usize = 64;
-///
-///     rustle::gettable_params! {
-///         c"blocksize": UNSIGNED_INTEGER => |p| p.set_size_t(Self::BLOCK_LEN),
-///         c"size":      UNSIGNED_INTEGER => |p| p.set_size_t(Self::DIGEST_LEN),
+///     fn newctx() -> Result<Self> { Ok(Self([0; 32])) }
+///     fn init(&mut self, _: Option<Params<'_>>) -> Result {
+///         self.0 = [0; 32];
+///         Ok(())
 ///     }
 ///
-///     fn update(&mut self, _data: &[u8]) {}
-///     fn finalize(&mut self, _out: &mut [u8]) {}
+///     rustle::gettable_params! {
+///         c"blocksize": UNSIGNED_INTEGER => |p| p.set_size_t(64),
+///         c"size":      UNSIGNED_INTEGER => |p| p.set_size_t(32),
+///     }
+///
+///     fn update(&mut self, _data: &[u8]) -> Result { Ok(()) }
+///     fn finalize(&mut self, out: &mut Output<'_>) -> Result { out.write(&self.0) }
 /// }
 /// ```
 #[macro_export]
 macro_rules! gettable_params {
+    (@vtable $($entries:tt)*) => {
+        const HAS_GETTABLE_PARAMS: bool = true;
+        const HAS_GET_PARAM: bool = true;
+        $crate::gettable_params! { $($entries)* }
+    };
     ($($name:literal : $ty:ident => |$p:ident| $fill:expr),* $(,)?) => {
         fn gettable_params() -> $crate::params::ParamTable {
             $crate::param_table! { $($name : $ty),* }
@@ -592,20 +609,24 @@ macro_rules! gettable_params {
 /// `bool`. Unlisted names return `false`.
 ///
 /// ```
-/// use rustle::digest::Digest;
+/// use rustle::digest::{Digest, Output, Result};
+/// use rustle::params::Params;
 ///
-/// #[derive(Clone, Default)]
 /// struct MyHash {
 ///     rounds: usize,
 /// }
 ///
+/// #[rustle::vtable]
 /// impl Digest for MyHash {
-///     const DIGEST_LEN: usize = 32;
-///     const BLOCK_LEN: usize = 64;
+///     fn newctx() -> Result<Self> { Ok(Self { rounds: 1 }) }
+///     fn init(&mut self, params: Option<Params<'_>>) -> Result {
+///         self.rounds = 1;
+///         self.apply_ctx_params(params)
+///     }
 ///
 ///     rustle::gettable_params! {
-///         c"blocksize": UNSIGNED_INTEGER => |p| p.set_size_t(Self::BLOCK_LEN),
-///         c"size":      UNSIGNED_INTEGER => |p| p.set_size_t(Self::DIGEST_LEN),
+///         c"blocksize": UNSIGNED_INTEGER => |p| p.set_size_t(64),
+///         c"size":      UNSIGNED_INTEGER => |p| p.set_size_t(32),
 ///     }
 ///
 ///     rustle::settable_ctx_params! {
@@ -618,12 +639,19 @@ macro_rules! gettable_params {
 ///         },
 ///     }
 ///
-///     fn update(&mut self, _data: &[u8]) {}
-///     fn finalize(&mut self, _out: &mut [u8]) {}
+///     fn update(&mut self, _data: &[u8]) -> Result { Ok(()) }
+///     fn finalize(&mut self, out: &mut Output<'_>) -> Result {
+///         out.write(&[0; 32])
+///     }
 /// }
 /// ```
 #[macro_export]
 macro_rules! settable_ctx_params {
+    (@vtable $($entries:tt)*) => {
+        const HAS_SETTABLE_CTX_PARAMS: bool = true;
+        const HAS_SET_CTX_PARAM: bool = true;
+        $crate::settable_ctx_params! { $($entries)* }
+    };
     ($($name:literal : $ty:ident => |$this:ident, $p:ident| $apply:expr),* $(,)?) => {
         fn settable_ctx_params() -> $crate::params::ParamTable {
             $crate::param_table! { $($name : $ty),* }

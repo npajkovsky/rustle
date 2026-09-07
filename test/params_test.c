@@ -83,6 +83,55 @@ static int test_name_query(int idx)
 	return ret;
 }
 
+static int test_integer_buffer_bounds(int idx)
+{
+	union buffer {
+		size_t size;
+		int status;
+		unsigned char bytes[sizeof(size_t) + sizeof(int)];
+	} actual[3], expected[3];
+	size_t width = idx == 0 ? sizeof(size_t) : sizeof(int);
+	EVP_MD *md = NULL;
+	int ret = 1;
+
+	if (idx == 0 && !TEST_ptr(md = EVP_MD_fetch(libctx, "SHA2-256", PROPQ)))
+		return 0;
+
+	for (size_t capacity = 0; capacity <= width + 1; ++capacity) {
+		OSSL_PARAM req[] = { OSSL_PARAM_END, OSSL_PARAM_END };
+		int result;
+
+		memset(actual, 0xa5, sizeof(actual));
+		memset(expected, 0xa5, sizeof(expected));
+		if (idx == 0) {
+			req[0] = OSSL_PARAM_construct_size_t(
+				OSSL_DIGEST_PARAM_SIZE, &actual[1].size);
+			if (capacity == width)
+				expected[1].size = 32;
+		} else {
+			req[0] =
+				OSSL_PARAM_construct_int(OSSL_PROV_PARAM_STATUS,
+							 &actual[1].status);
+			if (capacity == width)
+				expected[1].status = 1;
+		}
+		req[0].data_size = capacity;
+		TEST_note("%s: integer buffer, data_size=%zu", req[0].key,
+			  capacity);
+		result = idx == 0 ? EVP_MD_get_params(md, req)
+				  : OSSL_PROVIDER_get_params(prov, req);
+		/* These helpers accept only native-width integer buffers. */
+		ret &= TEST_int_eq(result, capacity == width);
+		ret &= TEST_size_t_eq(req[0].return_size, width);
+		ret &= TEST_size_t_eq(req[0].data_size, capacity);
+		/* Guard storage keeps a broken native-width write in-bounds. */
+		ret &= TEST_mem_eq(actual, sizeof(actual), expected,
+				   sizeof(expected));
+	}
+	EVP_MD_free(md);
+	return ret;
+}
+
 static const struct {
 	const char *name;
 	const char *key;
@@ -135,6 +184,46 @@ static int test_utf8_string(int idx)
 	return ret;
 }
 
+/* Optional setters must still be reachable when DUPCTX is omitted. */
+static int test_ctx_setters(void)
+{
+	EVP_MD *md = NULL;
+	EVP_MD_CTX *ctx = NULL;
+	const OSSL_PARAM *table, *entry;
+	unsigned char out[EVP_MAX_MD_SIZE];
+	unsigned int outl = 0;
+	int value = 42, ret = 0;
+	OSSL_PARAM params[] = { OSSL_PARAM_int("test-value", &value),
+				OSSL_PARAM_END };
+
+	if (!TEST_ptr(md = EVP_MD_fetch(libctx, "RUSTLE-PARAMS-TEST",
+					"provider=rustle_params_test"))
+	    || !TEST_ptr(ctx = EVP_MD_CTX_new())
+	    || !TEST_ptr(table = EVP_MD_settable_ctx_params(md))
+	    || !TEST_ptr(entry = OSSL_PARAM_locate_const(table, "test-value"))
+	    || !TEST_uint_eq(entry->data_type, OSSL_PARAM_INTEGER))
+		goto err;
+	/* INIT and SET_CTX_PARAMS share the generated parameter handler. */
+	if (!TEST_true(EVP_DigestInit_ex2(ctx, md, params))
+	    || !TEST_true(EVP_DigestFinal_ex(ctx, out, &outl))
+	    || !TEST_uint_eq(outl, 1) || !TEST_uint_eq(out[0], 42))
+		goto err;
+	value = 7;
+	if (!TEST_true(EVP_DigestInit_ex2(ctx, md, NULL))
+	    || !TEST_true(EVP_MD_CTX_set_params(ctx, params))
+	    || !TEST_true(EVP_DigestFinal_ex(ctx, out, &outl))
+	    || !TEST_uint_eq(outl, 1) || !TEST_uint_eq(out[0], 7))
+		goto err;
+	value = -1;
+	if (!TEST_int_eq(EVP_MD_CTX_set_params(ctx, params), 0))
+		goto err;
+	ret = 1;
+err:
+	EVP_MD_CTX_free(ctx);
+	EVP_MD_free(md);
+	return ret;
+}
+
 int setup_tests(void)
 {
 	if (!bc_rust_load(test_argc > 1 ? test_argv[1] : NULL, &libctx, &prov))
@@ -151,7 +240,9 @@ int setup_tests(void)
 	ADD_ALL_TESTS(test_size_query, 2 * ARRAY_SIZE(propqueries));
 	ADD_ALL_TESTS(test_status_query, 2 * ARRAY_SIZE(propqueries));
 	ADD_ALL_TESTS(test_name_query, 2 * ARRAY_SIZE(propqueries));
+	ADD_ALL_TESTS(test_integer_buffer_bounds, 2);
 	ADD_ALL_TESTS(test_utf8_string, ARRAY_SIZE(string_cases));
+	ADD_TEST(test_ctx_setters);
 	return 1;
 }
 

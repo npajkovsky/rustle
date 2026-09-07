@@ -19,6 +19,7 @@ debug = []
 abort = []
 
 [dependencies]
+rustle-macros = { path = "../rustle-macros" }
 
 [[example]]
 name = "params_provider"

@@ -18,8 +18,8 @@ panic = "abort"
 
 Under `no_std`, the `abort` feature supplies the `#[panic_handler]`, which
 calls the C runtime's `abort()` — already present in the host process that
-loaded the module (libSystem on macOS, libc on Linux), so the crate stays
-dependency-free:
+loaded the module (libSystem on macOS, libc on Linux), without adding a
+runtime dependency:
 
 ```rust,ignore
 #[panic_handler]

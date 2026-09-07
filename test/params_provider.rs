@@ -7,29 +7,43 @@
 #![forbid(unsafe_code)]
 
 use rustle::bindings::OSSL_ALGORITHM;
-use rustle::digest::{Digest, DigestAlgorithm};
+use rustle::digest::{Digest, DigestAlgorithm, Output, Result};
+use rustle::params::Params;
 use rustle::provider::{Provider, ProviderDesc};
 
-#[derive(Clone, Default)]
-struct TestDigest {
-    _state: u8,
-}
+struct TestDigest(u8);
 
+#[rustle::vtable]
 impl Digest for TestDigest {
-    const DIGEST_LEN: usize = 1;
-    const BLOCK_LEN: usize = 1;
+    fn newctx() -> Result<Self> {
+        Ok(Self(0))
+    }
+
+    fn init(&mut self, params: Option<Params<'_>>) -> Result {
+        self.0 = 0;
+        self.apply_ctx_params(params)
+    }
 
     rustle::gettable_params! {
-        c"size": UNSIGNED_INTEGER => |p| p.set_size_t(Self::DIGEST_LEN),
-        c"blocksize": UNSIGNED_INTEGER => |p| p.set_size_t(Self::BLOCK_LEN),
+        c"size": UNSIGNED_INTEGER => |p| p.set_size_t(1),
+        c"blocksize": UNSIGNED_INTEGER => |p| p.set_size_t(1),
         c"test-text": UTF8_STRING => |p| p.set_utf8_string("abc"),
         c"test-empty": UTF8_STRING => |p| p.set_utf8_string(""),
     }
 
-    fn update(&mut self, _data: &[u8]) {}
+    rustle::settable_ctx_params! {
+        c"test-value": INTEGER => |this, p| match p.get_int().and_then(|n| u8::try_from(n).ok()) {
+            Some(value) => { this.0 = value; true }
+            None => false,
+        },
+    }
 
-    fn finalize(&mut self, out: &mut [u8]) {
-        out.fill(0);
+    fn update(&mut self, _data: &[u8]) -> Result {
+        Ok(())
+    }
+
+    fn finalize(&mut self, out: &mut Output<'_>) -> Result {
+        out.write(&[self.0])
     }
 }
 

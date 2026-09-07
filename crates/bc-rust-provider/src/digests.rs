@@ -9,33 +9,48 @@
 
 use bouncycastle::core::traits::{Hash, HashAlgParams};
 use bouncycastle::{sha2, sha3};
-use rustle::digest::Digest;
+use rustle::digest::{Digest, Output, Result};
+use rustle::params::Params;
 
 /// A bc-rust hash behind the provider's [`Digest`] trait.
 ///
-/// Works for any bc-rust hash: [`Hash`] supplies the streaming API and the
-/// `Default` that [`Digest`] and the `mem::take` finalize need, and
-/// [`HashAlgParams`] supplies the digest/block lengths as consts.
-#[derive(Clone, Default)]
+/// Works for any cloneable bc-rust hash: [`Hash`] supplies construction and
+/// the streaming API, while [`HashAlgParams`] supplies the digest/block
+/// lengths as consts.
 pub struct BcDigest<H>(H);
 
-impl<H: Hash + HashAlgParams + Clone> Digest for BcDigest<H> {
-    const DIGEST_LEN: usize = H::OUTPUT_LEN;
-    const BLOCK_LEN: usize = H::BLOCK_LEN;
+#[rustle::vtable]
+impl<H: Hash + HashAlgParams + Clone + 'static> Digest for BcDigest<H> {
+    fn newctx() -> Result<Self> {
+        Ok(Self(H::default()))
+    }
+
+    fn init(&mut self, _params: Option<Params<'_>>) -> Result {
+        self.0 = H::default();
+        Ok(())
+    }
 
     // The values are per-`H`, but the table of names/types is not; the macro
     // puts it in one shared fn-local static.
     rustle::gettable_params! {
-        c"blocksize": UNSIGNED_INTEGER => |p| p.set_size_t(Self::BLOCK_LEN),
-        c"size":      UNSIGNED_INTEGER => |p| p.set_size_t(Self::DIGEST_LEN),
+        c"blocksize": UNSIGNED_INTEGER => |p| p.set_size_t(H::BLOCK_LEN),
+        c"size":      UNSIGNED_INTEGER => |p| p.set_size_t(H::OUTPUT_LEN),
     }
 
-    fn update(&mut self, data: &[u8]) {
+    fn update(&mut self, data: &[u8]) -> Result {
         self.0.do_update(data);
+        Ok(())
     }
 
-    fn finalize(&mut self, out: &mut [u8]) {
-        core::mem::take(&mut self.0).do_final_out(out);
+    fn finalize(&mut self, out: &mut Output<'_>) -> Result {
+        out.write_with(H::OUTPUT_LEN, |bytes| {
+            core::mem::take(&mut self.0).do_final_out(bytes);
+            Ok(())
+        })
+    }
+
+    fn dupctx(&self) -> Result<Self> {
+        Ok(Self(self.0.clone()))
     }
 }
 

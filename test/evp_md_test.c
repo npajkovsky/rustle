@@ -2,7 +2,9 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
 #include "openssl/crypto.h"
+#include <openssl/core_names.h>
 #include <openssl/evp.h>
+#include <openssl/params.h>
 
 #include "testutil.h"
 
@@ -129,6 +131,42 @@ err:
 }
 
 /*
+ * These SHA2/SHA3 digests have no configurable per-context state and must not
+ * advertise setters; an attempt to change their output size must fail
+ * rather than succeed without changing anything.
+ */
+static int test_fixed_digest_has_no_ctx_setters(int idx)
+{
+	const char *alg = digest_kats[idx].alg;
+	size_t size = 100;
+	OSSL_PARAM params[] = {
+		OSSL_PARAM_size_t(OSSL_DIGEST_PARAM_SIZE, &size),
+		OSSL_PARAM_END,
+	};
+	EVP_MD *md = NULL;
+	EVP_MD_CTX *ctx = NULL;
+	int ret = 1;
+
+	if (!TEST_ptr(md = EVP_MD_fetch(libctx, alg, PROPQ))
+	    || !TEST_ptr(ctx = EVP_MD_CTX_new())) {
+		ret = 0;
+		goto err;
+	}
+
+	ret &= TEST_ptr_null(EVP_MD_settable_ctx_params(md));
+	if (!TEST_true(EVP_DigestInit_ex2(ctx, md, NULL))) {
+		ret = 0;
+		goto err;
+	}
+	ret &= TEST_int_eq(EVP_MD_CTX_set_params(ctx, params), 0);
+
+err:
+	EVP_MD_CTX_free(ctx);
+	EVP_MD_free(md);
+	return ret;
+}
+
+/*
  * Copy a context mid-hash and finish both halves: the copy must carry the
  * absorbed state, and the original must be unaffected. This is the only
  * coverage of OSSL_FUNC_digest_dupctx.
@@ -215,6 +253,8 @@ int setup_tests(void)
 	ADD_TEST(test_digest_aliases);
 	ADD_ALL_TESTS(test_digest, ARRAY_SIZE(digest_kats));
 	ADD_ALL_TESTS(test_digest_streaming, ARRAY_SIZE(digest_kats));
+	ADD_ALL_TESTS(test_fixed_digest_has_no_ctx_setters,
+		      ARRAY_SIZE(digest_kats));
 	ADD_ALL_TESTS(test_digest_copy, ARRAY_SIZE(digest_kats));
 
 	return 1;
