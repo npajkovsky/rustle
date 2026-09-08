@@ -19,4 +19,4 @@ crate-type = ["cdylib", "lib"]
 # The safe provider-ABI layer; std because bc-rust requires std.
 rustle = { path = "../rustle" }
 # The crypto: BouncyCastle's Rust port (the bc-rust workspace).
-bouncycastle = { path = "../../../bc-rust" }
+bouncycastle = { git = "https://github.com/bcgit/bc-rust", branch = "release/0.1.3alpha" }
