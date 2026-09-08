@@ -15,6 +15,9 @@
 
 CARGO  ?= cargo
 MDBOOK ?= mdbook
+CLANG_FORMAT ?= clang-format
+
+C_FORMAT_SRCS := $(shell find test -type f \( -name '*.c' -o -name '*.h' \) -print)
 
 # Normalize the public OpenSSL build-tree selector once. pkg-config's search
 # path and the OPENSSL variable consumed by the Rust tests remain internal
@@ -44,7 +47,8 @@ SUBMAKE = $(OPENSSL_PKG_CONFIG_ENV) $(MAKE) -C test \
 	CARGO_FLAGS='$(CARGO_FLAGS)' PROVE_FLAGS='$(PROVE_FLAGS)'
 
 .PHONY: all build build-no-std build-std module bulid-test \
-	test c-test cargo-test check fmt fmt-check clippy docs clean help FORCE
+	test c-test cargo-test check fmt rust-fmt c-fmt fmt-check \
+	rust-fmt-check c-fmt-check clippy docs clean help FORCE
 
 all: build
 
@@ -98,11 +102,21 @@ check: build fmt-check test
 # Housekeeping                                                       #
 # ------------------------------------------------------------------ #
 
-fmt:
+fmt: rust-fmt c-fmt
+
+rust-fmt:
 	$(CARGO) fmt
 
-fmt-check:
+c-fmt:
+	$(CLANG_FORMAT) --style=file -i $(C_FORMAT_SRCS)
+
+fmt-check: rust-fmt-check c-fmt-check
+
+rust-fmt-check:
 	$(CARGO) fmt --check
+
+c-fmt-check:
+	$(CLANG_FORMAT) --style=file --dry-run --Werror $(C_FORMAT_SRCS)
 
 clippy:
 	$(CARGO) clippy --all-targets $(CARGO_FLAGS)
@@ -130,13 +144,17 @@ help:
 	'  cargo-test     doctests and the openssl-CLI known answers' \
 	'  check          build, fmt-check, test' \
 	'' \
-	'  fmt            cargo fmt' \
-	'  fmt-check      cargo fmt --check' \
+	'  fmt            format Rust and C sources' \
+	'  rust-fmt       cargo fmt' \
+	'  c-fmt          clang-format -i' \
+	'  fmt-check      check Rust and C formatting' \
+	'  rust-fmt-check cargo fmt --check' \
+	'  c-fmt-check    clang-format --dry-run --Werror' \
 	'  clippy         cargo clippy --all-targets' \
 	'  docs           mdbook build docs' \
 	'  clean          cargo clean and drop the C build artifacts' \
 	'' \
 	'Variables: PROFILE (debug|release), PROVE_FLAGS, CARGO, MDBOOK,' \
-	'OPENSSL_ROOT_DIR'
+	'CLANG_FORMAT, OPENSSL_ROOT_DIR'
 
 FORCE:

@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  preflight:
+    name: Formatting preflight
+    if: github.repository == 'openssl-projects/rustle'
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out rustle
+        uses: actions/checkout@v5
+        with:
+          path: rustle
+
+      - name: Check out bc-rust
+        uses: actions/checkout@v5
+        with:
+          repository: bcgit/bc-rust
+          ref: release/0.1.3alpha
+          path: bc-rust
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Install clang-format
+        run: |
+          python3 -m venv "$RUNNER_TEMP/clang-format"
+          "$RUNNER_TEMP/clang-format/bin/pip" install clang-format==22.1.8
+
+      - name: Check Rust formatting
+        working-directory: rustle
+        run: make rust-fmt-check
+
+      - name: Check C formatting
+        working-directory: rustle
+        env:
+          CLANG_FORMAT: ${{ runner.temp }}/clang-format/bin/clang-format
+        run: make c-fmt-check
+
+  test:
+    name: Test
+    if: github.repository == 'openssl-projects/rustle'
+    needs: preflight
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out rustle
+        uses: actions/checkout@v5
+        with:
+          path: rustle
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes build-essential libssl-dev libtest-harness-perl pkg-config
+
+      - name: Run tests
+        working-directory: rustle
+        run: make test

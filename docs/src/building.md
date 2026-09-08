@@ -39,13 +39,25 @@ which is these steps, each also a target of its own:
 | `cargo build -p rustle --features std` | `build-std` |
 | `cargo build -p bc-rust-provider` (the module) | `module` |
 | Build the C test programs without running them | `bulid-test` |
-| `cargo fmt --check` | `fmt-check` |
+| `cargo fmt --check` | `rust-fmt-check` |
+| `clang-format --dry-run --Werror` over the C test sources | `c-fmt-check` |
 | `cargo test` — doctests + CLI KATs | `cargo-test` |
 | `prove` over `test/recipes/` — C-side KATs | `c-test` |
 
-`make test` is the last two together. `PROFILE=release` builds and tests
+`fmt-check` runs both formatting checks, and `make test` runs the last two
+together. `PROFILE=release` builds and tests
 against `target/release` instead; `PROVE_FLAGS` passes through to the TAP
 harness. `make help` lists the rest.
+
+The C formatting targets require clang-format; CI pins 22.1.8 for reproducible
+results. Set `CLANG_FORMAT` when that binary is installed under a versioned or
+non-standard name.
+
+GitHub Actions runs the two formatting checks as a preflight job. The test job
+depends on that job, so it runs `make test` only after both Rust and C formatting
+are clean. CI jobs run only in `openssl-projects/rustle`; runs in forks skip
+preflight and its dependent test job. Pull requests from forks targeting upstream
+remain eligible to run there.
 
 To build and test against a configured OpenSSL build tree instead of the
 system OpenSSL, pass its root once:

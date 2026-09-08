@@ -4,6 +4,7 @@
 
 - A Rust toolchain with edition 2024.
 - An OpenSSL installation for the CLI.
+- clang-format 22.1.8
 
 ## Build the module
 
