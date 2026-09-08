@@ -4,8 +4,6 @@
 # mdbook output
 /docs/book
 
-/Cargo.lock
-
 /test/*_test
 *.dSYM
 

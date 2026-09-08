@@ -3,9 +3,7 @@
 ## Requirements
 
 - A Rust toolchain with edition 2024.
-- An OpenSSL 3.x installation for the CLI.
-- The bc-rust workspace checked out as a sibling of this repository — the
-  path dependency expects `../bc-rust`, package name `bouncycastle`.
+- An OpenSSL installation for the CLI.
 
 ## Build the module
 

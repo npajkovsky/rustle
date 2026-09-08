@@ -17,8 +17,8 @@ and *implementing cryptography* never live in the same crate:
 
 ## Quick start
 
-Needs a Rust toolchain with edition 2024, an OpenSSL 3.x installation, and
-the bc-rust workspace checked out at `../bc-rust`.
+Needs a Rust toolchain with edition 2024 and an OpenSSL 3.x installation.
+Cargo fetches bc-rust automatically from Git.
 
 ```sh
 cargo build -p bc-rust-provider
