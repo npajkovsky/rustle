@@ -178,7 +178,15 @@ static int test_utf8_string(int idx)
 	/* The short-buffer and wrong-type control calls may queue errors. */
 	ERR_clear_error();
 	ret = TEST_int_eq(EVP_MD_get_params(params_md, req), expected_ret);
-	ret &= TEST_size_t_eq(req[0].return_size, reference.return_size);
+	/* A rejected type reports no size, as OpenSSL 3.5 and later do
+	 * (commit 1dafff06ca6a, "Don't promise a non-zero return size in
+	 * error cases"); older libcrypto still reports the text length there,
+	 * so the reference value is not comparable for that case. */
+	if (string_cases[idx].data_type == OSSL_PARAM_UTF8_STRING)
+		ret &= TEST_size_t_eq(req[0].return_size,
+				      reference.return_size);
+	else
+		ret &= TEST_size_t_eq(req[0].return_size, 0);
 	/* Compare all bytes, including NUL and the untouched buffer tail. */
 	ret &= TEST_mem_eq(actual, sizeof(actual), expected, sizeof(expected));
 	return ret;
