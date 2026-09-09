@@ -53,11 +53,24 @@ The C formatting targets require clang-format; CI pins 22.1.8 for reproducible
 results. Set `CLANG_FORMAT` when that binary is installed under a versioned or
 non-standard name.
 
+On macOS, the system `openssl` is LibreSSL and Homebrew keeps `openssl@3`
+keg-only, so `pkg-config` finds no `libcrypto.pc` by default. Point it at the
+keg — what CI does:
+
+```sh
+export PKG_CONFIG_PATH="$(brew --prefix openssl@3)/lib/pkgconfig"
+```
+
 GitHub Actions runs the two formatting checks as a preflight job. The test job
-depends on that job, so it runs `make test` only after both Rust and C formatting
-are clean. CI jobs run only in `openssl-projects/rustle`; runs in forks skip
-preflight and its dependent test job. Pull requests from forks targeting upstream
-remain eligible to run there.
+depends on that job, so it runs `make test` only after both Rust and C
+formatting are clean, and it fans out over Ubuntu and macOS on both x86_64 and
+arm64 — so the Darwin-specific parts of the build (the `libSystem` link, the
+module's `.dylib` name, the install-name rewrite) stay covered, and so does
+each target triple's own codegen and calling convention across the provider's
+FFI boundary. The matrix does not fail fast: one platform breaking still
+reports the others. CI jobs run only in `openssl-projects/rustle`; runs in
+forks skip preflight and its dependent test jobs. Pull requests from forks
+targeting upstream remain eligible to run there.
 
 To build and test against a configured OpenSSL build tree instead of the
 system OpenSSL, pass its root once:
