@@ -53,10 +53,24 @@ jobs:
         run: make c-fmt-check
 
   test:
-    name: Test
+    name: Test (${{ matrix.name }})
     if: github.repository == 'openssl-projects/rustle'
     needs: preflight
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      # One platform's failure should not hide the others'.
+      fail-fast: false
+      matrix:
+        include:
+          - name: Ubuntu x86_64
+            runner: ubuntu-24.04
+          - name: Ubuntu arm64
+            runner: ubuntu-24.04-arm
+          - name: macOS arm64
+            runner: macos-15
+          - name: macOS x86_64
+            runner: macos-15-intel
 
     steps:
       - name: Check out rustle
@@ -67,10 +81,24 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install native dependencies
+      - name: Install native dependencies (Linux)
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install --yes build-essential libssl-dev libtest-harness-perl pkg-config
+
+      # macOS ships LibreSSL, not OpenSSL, and Homebrew keeps openssl@3
+      # keg-only -- so pkg-config and the CLI both have to be pointed at it.
+      # prove comes from the system perl.
+      - name: Install native dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          for formula in openssl@3 pkgconf; do
+            brew list --formula "$formula" >/dev/null 2>&1 || brew install "$formula"
+          done
+          openssl_prefix=$(brew --prefix openssl@3)
+          echo "PKG_CONFIG_PATH=$openssl_prefix/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}" >> "$GITHUB_ENV"
+          echo "$openssl_prefix/bin" >> "$GITHUB_PATH"
 
       - name: Run tests
         working-directory: rustle
