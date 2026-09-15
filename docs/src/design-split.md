@@ -15,7 +15,10 @@ methods it supplies:
 
 ```rust,ignore
 #[rustle::vtable]
-impl<H: Hash + HashAlgParams + Clone + 'static> Digest for BcDigest<H> {
+impl<H, const SLEN: usize> Digest for BcDigest<H, SLEN>
+where
+    H: Hash + HashAlgParams + Clone + Suspendable<SLEN> + 'static,
+{
     fn newctx() -> Result<Self> {
         Ok(Self(H::default()))
     }
@@ -45,8 +48,29 @@ impl<H: Hash + HashAlgParams + Clone + 'static> Digest for BcDigest<H> {
     fn dupctx(&self) -> Result<Self> {
         Ok(Self(self.0.clone()))
     }
+
+    fn serialize(&self, out: Option<&mut Output<'_>>) -> Result<usize> {
+        let Some(out) = out else {
+            return Ok(SLEN);
+        };
+        out.write(&self.0.clone().suspend())?;
+        Ok(out.written())
+    }
+
+    fn deserialize(&mut self, input: &[u8]) -> Result {
+        let state = <[u8; SLEN]>::try_from(input)
+            .map_err(|_| Error::InvalidParameter)?;
+        self.0 = H::from_suspended(state).map_err(|_| Error::InvalidParameter)?;
+        Ok(())
+    }
 }
 ```
+
+The wrapper is `BcDigest<H, const SLEN: usize>(H)`. Each concrete alias
+selects the hash and its bc-rust suspended-state length, allowing the generic
+implementation to use `Suspendable<SLEN>` without a bridge trait. The
+[serialization contract](#state-serialization) explains
+the size-query and output semantics.
 
 Then place `DigestAlgorithm::<MyHash>::functions()` in an `OSSL_ALGORITHM`
 table, wrap it in a `ProviderDesc`, and export the entry point:
@@ -183,8 +207,43 @@ The descriptor can then store the key pointer without losing its lifetime.
 
 `#[rustle::vtable]` records which optional digest methods an implementation
 supplies. This avoids capability-trait combinations while keeping one
-strongly typed context and one audited set of FFI adapters. See
-[Digest Vtables](./design-vtable.md) for the interface and its current scope.
+strongly typed context and one audited set of FFI adapters. Omitted optional
+methods retain safe failure defaults and add no dispatch entries. Presence
+metadata controls registration, not memory safety.
+
+A context accessor and its descriptor method must be supplied together.
+A getter also requires a setter: readable context parameters represent
+genuinely configurable state. Fixed algorithm properties belong in
+`gettable_params!`. The dispatch constant checks these requirements.
+
+## State serialization
+
+`serialize(&self, Option<&mut Output<'_>>) -> Result<usize>` and
+`deserialize(&mut self, &[u8]) -> Result` independently register their
+OpenSSL callbacks. Both default to `Error::Unsupported`.
+
+Under the [OpenSSL contract](https://docs.openssl.org/master/man7/provider-digest/),
+a null output queries the maximum required buffer size. The adapter calls
+`serialize(None)` and writes the returned size to `*outl` without reading it.
+For non-null output, `*outl` supplies the initialized capacity. The adapter
+calls `serialize(Some(...))` with bounded `Output` storage and reports
+`Output::written()` on success; the method's returned number is authoritative
+only for a query. Failure leaves the length slot unchanged but does not undo
+partial output writes. `Output` supports uninitialized C storage and counts
+only bytes committed by successful writes.
+
+Serialization rejects null contexts and length slots. Deserialization also
+rejects null or empty input. Buffer lengths must fit Rust's slice limit.
+Restoration targets an already initialized context without resetting it;
+implementations own format validation, compatibility, and failure-state policy.
+
+`BcDigest<H, SLEN>` uses `Suspendable<SLEN>` directly. Keeping the length in
+the wrapper type constrains the const parameter without a bridge trait.
+Serialization suspends a clone because bc-rust's `suspend` consumes its
+receiver. Restoration requires an exact-length array and replaces the live
+context only after decoding succeeds. See
+[Serialized digest state](./algorithms.md#serialized-digest-state) for the
+provider's compatibility guarantees.
 
 ## Minimal dependencies
 

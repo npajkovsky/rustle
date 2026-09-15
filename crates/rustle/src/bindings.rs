@@ -52,6 +52,14 @@ pub type DigestFinalFn = unsafe extern "C" fn(
     outl: *mut usize,
     outsz: usize,
 ) -> ffi::c_int;
+/// Signature of `OSSL_FUNC_digest_serialize` — query size (null `out`) or
+/// export state (non-null `out`, with `*outl` as in/out capacity/length).
+pub type DigestSerializeFn =
+    unsafe extern "C" fn(dctx: *mut ffi::c_void, out: *mut u8, outl: *mut usize) -> ffi::c_int;
+/// Signature of `OSSL_FUNC_digest_deserialize` — restore state into an
+/// already-initialized context.
+pub type DigestDeserializeFn =
+    unsafe extern "C" fn(dctx: *mut ffi::c_void, input: *const u8, len: usize) -> ffi::c_int;
 /// Signature of `OSSL_FUNC_digest_get_params` — fill digest-wide parameters.
 pub type DigestGetParamsFn = unsafe extern "C" fn(params: *mut OSSL_PARAM) -> ffi::c_int;
 /// Signature of `OSSL_FUNC_digest_gettable_params` — return the descriptor list.
@@ -173,7 +181,7 @@ impl OSSL_DISPATCH {
     /// Supply random bytes to the core (used as a seed source).
     pub const OSSL_FUNC_PROVIDER_RANDOM_BYTES: ffi::c_int = 1032;
 
-    // Digest operation functions (`OSSL_FUNC_DIGEST_*`, IDs 1-15 in
+    // Digest operation functions (`OSSL_FUNC_DIGEST_*` in
     // `<openssl/core_dispatch.h>`
 
     /// Allocate a new digest context.
@@ -206,6 +214,11 @@ impl OSSL_DISPATCH {
     ///
     /// [`get_ctx_params`]: Self::OSSL_FUNC_DIGEST_GET_CTX_PARAMS
     pub const OSSL_FUNC_DIGEST_GETTABLE_CTX_PARAMS: ffi::c_int = 13;
+    /// Export digest state, or query its maximum serialized size through a
+    /// null output buffer.
+    pub const OSSL_FUNC_DIGEST_SERIALIZE: ffi::c_int = 16;
+    /// Restore serialized state into an initialized digest context.
+    pub const OSSL_FUNC_DIGEST_DESERIALIZE: ffi::c_int = 17;
 
     // Operation IDs used by query_operation (core_dispatch.h).
 
@@ -301,6 +314,18 @@ impl OSSL_DISPATCH {
     #[must_use]
     pub(crate) const fn digest_final(f: DigestFinalFn) -> Self {
         Self::erase(Self::OSSL_FUNC_DIGEST_FINAL, f as *const ())
+    }
+
+    /// Builds the `OSSL_FUNC_DIGEST_SERIALIZE` entry.
+    #[must_use]
+    pub(crate) const fn digest_serialize(f: DigestSerializeFn) -> Self {
+        Self::erase(Self::OSSL_FUNC_DIGEST_SERIALIZE, f as *const ())
+    }
+
+    /// Builds the `OSSL_FUNC_DIGEST_DESERIALIZE` entry.
+    #[must_use]
+    pub(crate) const fn digest_deserialize(f: DigestDeserializeFn) -> Self {
+        Self::erase(Self::OSSL_FUNC_DIGEST_DESERIALIZE, f as *const ())
     }
 
     /// Builds the `OSSL_FUNC_DIGEST_GET_PARAMS` entry.

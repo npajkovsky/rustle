@@ -31,9 +31,31 @@ for that hash. The table keeps all callbacks tied to that hash's context
 type; provider code cannot combine callbacks from different implementations.
 
 Method presence decides which optional callbacks each dispatch table contains.
-These fixed-length hashes have no per-context state, so they register context
+These fixed-length hashes have no configurable context parameters, so they register context
 parameters in neither direction — as the default provider's own fixed-length
-digests do not. See [Digest Vtables](./design-vtable.md).
+digests do not. See [The Crate Split](./design-split.md#method-driven-dispatch).
+
+### Serialized digest state
+
+All registered digests support `EVP_MD_CTX_serialize` and
+`EVP_MD_CTX_deserialize` on OpenSSL versions exposing those APIs. Query the
+buffer size with a null output, then pass the allocated capacity through the
+length slot when serializing. Initialize the destination with the same digest
+algorithm before restoring. Serialization leaves the source computation
+usable; a successful restore can continue absorbing input and finalize.
+Rejected restores preserve the destination's previous state.
+
+The blob is bc-rust's version-tagged `Suspendable` format, not a Rust memory
+image or the OpenSSL default provider's serialization format. This provider
+guarantees round trips with the same build and algorithm; it does not promise
+interchange with other providers or compatibility across bc-rust upgrades.
+bc-rust checks the library version tag and format-specific fields on restore;
+acceptance of a version tag alone is not a cross-version guarantee.
+
+Callers must retain the algorithm identity alongside the blob: SHA2 variants
+within a state-size family do not encode that identity, so deserialization
+cannot reliably reject a blob from the wrong variant. Blobs contain internal
+hash state and buffered input and provide no authentication.
 
 ## Operations not served
 

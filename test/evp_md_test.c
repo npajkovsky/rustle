@@ -2,9 +2,11 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
 #include "openssl/crypto.h"
+#include <openssl/core_dispatch.h>
 #include <openssl/core_names.h>
 #include <openssl/evp.h>
 #include <openssl/params.h>
+#include <string.h>
 
 #include "testutil.h"
 
@@ -251,6 +253,70 @@ static int test_digest_aliases(void)
 	return 1;
 }
 
+#if defined(OSSL_FUNC_DIGEST_SERIALIZE) && defined(OSSL_FUNC_DIGEST_DESERIALIZE)
+static int test_evp_md_ctx_serialize(int tstid)
+{
+
+	EVP_MD_CTX *mdctx1 = NULL, *mdctx2 = NULL;
+	EVP_MD *md = NULL;
+	unsigned char *buf = NULL;
+	size_t buflen;
+	size_t tmplen;
+	unsigned char d1[EVP_MAX_MD_SIZE], d2[EVP_MAX_MD_SIZE];
+	unsigned int d1_len, d2_len;
+	int ret = 0;
+	const char *data1 = "some data";
+	const char *data2 = "some more data";
+
+	if (!TEST_ptr(md = EVP_MD_fetch(libctx, digest_kats[tstid].alg, NULL)))
+		goto end;
+
+	mdctx1 = EVP_MD_CTX_new();
+	mdctx2 = EVP_MD_CTX_new();
+
+	/* Initiate a digest with data */
+	if (!TEST_ptr(mdctx2) || !TEST_ptr(mdctx1)
+	    || !TEST_true(EVP_DigestInit_ex2(mdctx1, md, NULL))
+	    || !TEST_true(EVP_DigestUpdate(mdctx1, data1, strlen(data1))))
+		goto end;
+
+	/* Get required buffer size and serialize */
+	if (!TEST_true(EVP_MD_CTX_serialize(mdctx1, NULL, &buflen))
+	    || !TEST_ptr(buf = OPENSSL_malloc(buflen))
+	    || !TEST_true(EVP_MD_CTX_serialize(mdctx1, buf, &buflen)))
+		goto end;
+
+	/* Deserialize */
+	if (!TEST_true(EVP_DigestInit_ex2(mdctx2, md, NULL))
+	    || !TEST_true(EVP_MD_CTX_deserialize(mdctx2, buf, buflen)))
+		goto end;
+
+	/* Test that updating in parallel will now yield the same values */
+	if (!TEST_true(EVP_DigestUpdate(mdctx1, data2, strlen(data2)))
+	    || !TEST_true(EVP_DigestUpdate(mdctx2, data2, strlen(data2)))
+	    || !TEST_true(EVP_DigestFinal_ex(mdctx1, d1, &d1_len))
+	    || !TEST_true(EVP_DigestFinal_ex(mdctx2, d2, &d2_len))
+	    || !TEST_uint_eq(d1_len, d2_len)
+	    || !TEST_mem_eq(d1, d1_len, d2, d2_len))
+		goto end;
+
+	/* Check that serialization fails on finalized contexts */
+	if (!TEST_false(EVP_MD_CTX_serialize(mdctx1, NULL, &tmplen))
+	    || !TEST_false(EVP_MD_CTX_deserialize(mdctx1, buf, buflen)))
+		goto end;
+
+	ret = 1;
+
+end:
+	OPENSSL_free(buf);
+	EVP_MD_CTX_free(mdctx1);
+	EVP_MD_CTX_free(mdctx2);
+	EVP_MD_free(md);
+
+	return ret;
+}
+#endif
+
 /* ------------------------------------------------------------------ */
 /* Framework hooks                                                    */
 /* ------------------------------------------------------------------ */
@@ -266,6 +332,9 @@ int setup_tests(void)
 	ADD_ALL_TESTS(test_fixed_digest_has_no_ctx_params,
 		      ARRAY_SIZE(digest_kats));
 	ADD_ALL_TESTS(test_digest_copy, ARRAY_SIZE(digest_kats));
+#if defined(OSSL_FUNC_DIGEST_SERIALIZE) && defined(OSSL_FUNC_DIGEST_DESERIALIZE)
+	ADD_ALL_TESTS(test_evp_md_ctx_serialize, ARRAY_SIZE(digest_kats));
+#endif
 
 	return 1;
 }

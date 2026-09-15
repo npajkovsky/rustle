@@ -177,6 +177,32 @@ pub trait Digest: Sized + 'static {
         Err(Error::Unsupported)
     }
 
+    /// Optionally export state without consuming the computation.
+    ///
+    /// `None` requests the maximum serialized size; `Some` writes the blob and
+    /// the adapter reports the bytes this context's [`Output`] committed, so
+    /// the returned length is authoritative only for the query. The
+    /// implementation defines the format and its compatibility guarantees;
+    /// see OpenSSL's `provider-digest(7)` serialization contract.
+    ///
+    /// # Errors
+    /// The default returns [`Error::Unsupported`].
+    fn serialize(&self, _out: Option<&mut Output<'_>>) -> Result<usize> {
+        Err(Error::Unsupported)
+    }
+
+    /// Optionally restore state into an initialized context.
+    ///
+    /// `None` represents a null input from the core and should be rejected.
+    /// Validation and the failed-restoration state policy belong to the
+    /// implementation.
+    ///
+    /// # Errors
+    /// The default returns [`Error::Unsupported`].
+    fn deserialize(&mut self, _input: &[u8]) -> Result {
+        Err(Error::Unsupported)
+    }
+
     /// Optional descriptor table, paired with `set_ctx_param`.
     #[must_use]
     fn settable_ctx_params() -> ParamTable {
@@ -238,7 +264,7 @@ impl<D: Digest> DigestAlgorithm<D> {
     // Const slice indexing is not available on the minimum toolchain. Both
     // indices are bounded by the candidate count and the extra END slot.
     #[allow(clippy::indexing_slicing)]
-    const ENTRIES: [OSSL_DISPATCH; 13] = {
+    const ENTRIES: [OSSL_DISPATCH; 15] = {
         assert!(
             D::HAS_SET_CTX_PARAM == D::HAS_SETTABLE_CTX_PARAMS,
             "context setter and descriptor methods must be implemented together"
@@ -288,8 +314,18 @@ impl<D: Digest> DigestAlgorithm<D> {
             } else {
                 None
             },
+            if D::HAS_SERIALIZE {
+                Some(OSSL_DISPATCH::digest_serialize(Self::serialize))
+            } else {
+                None
+            },
+            if D::HAS_DESERIALIZE {
+                Some(OSSL_DISPATCH::digest_deserialize(Self::deserialize))
+            } else {
+                None
+            },
         ];
-        let mut entries = [OSSL_DISPATCH::END; 13];
+        let mut entries = [OSSL_DISPATCH::END; 15];
         let mut source = 0;
         let mut dest = 0;
         // Each candidate contributes at most one entry, leaving room for END.
@@ -397,6 +433,61 @@ impl<D: Digest> DigestAlgorithm<D> {
         // bytes, bounded by the caller's capacity.
         unsafe { *outl = output.written() };
         1
+    }
+
+    unsafe extern "C" fn serialize(
+        dctx: *mut ffi::c_void,
+        out: *mut u8,
+        outl: *mut usize,
+    ) -> ffi::c_int {
+        if dctx.is_null() || outl.is_null() {
+            return 0;
+        }
+        // SAFETY: OpenSSL lends a live D; serialization only reads its state.
+        let ctx = unsafe { &*dctx.cast::<D>() };
+        if out.is_null() {
+            let Ok(size) = ctx.serialize(None) else {
+                return 0;
+            };
+            // SAFETY: outl is a valid writable size slot; a query never reads it.
+            unsafe { *outl = size };
+            return 1;
+        }
+        // SAFETY: the callback contract makes outl an initialized capacity
+        // input once out is non-null.
+        let capacity = unsafe { *outl };
+        if isize::try_from(capacity).is_err() {
+            return 0;
+        }
+        // SAFETY: the core lends capacity writable bytes exclusively,
+        // disjoint from ctx and outl; MaybeUninit permits uninit contents.
+        let storage =
+            unsafe { core::slice::from_raw_parts_mut(out.cast::<MaybeUninit<u8>>(), capacity) };
+
+        let mut output = Output::new(storage);
+        if ctx.serialize(Some(&mut output)).is_err() {
+            return 0;
+        }
+        // SAFETY: outl is a valid output slot; Output tracks only initialized
+        // bytes, bounded by the caller's capacity.
+        unsafe { *outl = output.written() };
+        1
+    }
+
+    unsafe extern "C" fn deserialize(
+        dctx: *mut ffi::c_void,
+        input: *const u8,
+        len: usize,
+    ) -> ffi::c_int {
+        if dctx.is_null() || isize::try_from(len).is_err() || input.is_null() || len == 0 {
+            return 0;
+        }
+        // SAFETY: OpenSSL lends this live D exclusively for restoration.
+        let ctx = unsafe { &mut *dctx.cast::<D>() };
+        // SAFETY: the non-null input is readable for len bytes per the
+        // callback contract; its length fits the Rust slice limit.
+        let input = unsafe { core::slice::from_raw_parts(input, len) };
+        ffi::c_int::from(ctx.deserialize(input).is_ok())
     }
 
     unsafe extern "C" fn get_params(params: *mut OSSL_PARAM) -> ffi::c_int {
